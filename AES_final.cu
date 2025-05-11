@@ -91,6 +91,6 @@ int main() {
 	//mainSilent();
 
 	// File Encryption
-	//mainFileEncryption();
+	mainFileEncryption();
 	return 0;
 }
