@@ -445,7 +445,7 @@ __host__ int mainFileEncryption() {
 	// Inputs
 	int chunkSize = 1024;
 	int keyLen = AES_128_KEY_LEN_INT;
-	const std::string filePath = "C://file-encryption-test//movie4.mp4";
+	const std::string filePath = "../big.txt";
 	const std::string outFilePath = filePath + "_ENC";
 
 	std::fstream fileIn(filePath, std::fstream::in | std::fstream::binary);
