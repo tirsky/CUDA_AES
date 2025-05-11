@@ -63,7 +63,7 @@ int main() {
 		"(7) AES-256 CTR\n"
 		"(8) ALL\n"
 		"Choice: ");
-	scanf_s("%d", &choice);
+	scanf("%d", &choice);
 	selection(choice);
 //  AES-128 Exhaustive Search
 //	main128ExhaustiveSearch();
