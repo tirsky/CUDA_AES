@@ -17,7 +17,7 @@ typedef unsigned long long	    u64;
 #define BYTE_COUNT						16  // 128 / 8
 #define PARTLY_DIVIDE_THRESHOLD			110
 
-#define AES_128_KEY_LEN_INT 4
+#define AES_128_KEY_LEN_INT 8
 #define AES_192_KEY_LEN_INT 6
 #define AES_256_KEY_LEN_INT 8
 
