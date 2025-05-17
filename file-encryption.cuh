@@ -464,9 +464,9 @@ __host__ int mainFileEncryption() {
 		u32 *pt, *rk, rk128[AES_128_KEY_LEN_INT], rk192[AES_192_KEY_LEN_INT], rk256[AES_256_KEY_LEN_INT]; 
 		gpuErrorCheck(cudaMallocManaged(&pt, 4 * sizeof(u32)));
 
-		pt[0] = 0x3243F6A8U;
-		pt[1] = 0x885A308DU;
-		pt[2] = 0x313198A2U;
+		pt[0] = 0x3343F6A8U;
+		pt[1] = 0x895A308DU;
+		pt[2] = 0x323198A2U;
 		pt[3] = 0x00000000U;
 
 		rk128[0] = 0x2B7E1516U;
@@ -481,14 +481,14 @@ __host__ int mainFileEncryption() {
 		rk192[4] = 0x62f8ead2U;
 		rk192[5] = 0x522c6b7bU;
 
-		rk256[0] = 0x603deb10U;
-		rk256[1] = 0x15ca71beU;
-		rk256[2] = 0x2b73aef0U;
-		rk256[3] = 0x857d7781U;
-		rk256[4] = 0x1f352c07U;
-		rk256[5] = 0x3b6108d7U;
-		rk256[6] = 0x2d9810a3U;
-		rk256[7] = 0x0914dff4U;
+		rk256[0] = 0x613deb10U;
+		rk256[1] = 0x16ca71beU;
+		rk256[2] = 0x2b83aef0U;
+		rk256[3] = 0x867d7781U;
+		rk256[4] = 0x1f362c07U;
+		rk256[5] = 0x3b6208d7U;
+		rk256[6] = 0x2d9910a3U;
+		rk256[7] = 0x0924dff4U;
 
 		// Allocate RCON values
 		u32* rcon;
