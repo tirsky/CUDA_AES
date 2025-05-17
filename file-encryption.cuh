@@ -444,7 +444,7 @@ __host__ int mainFileEncryption() {
 
 	// Inputs
 	int chunkSize = 1024;
-	int keyLen = AES_128_KEY_LEN_INT;
+	int keyLen = AES_256_KEY_LEN_INT;
 	const std::string filePath = "../big.txt";
 	const std::string outFilePath = filePath + "_ENC";
 
