@@ -20,6 +20,65 @@
 #include <sys/stat.h>
 #include <string>
 #include <fstream>
+#include <vector>
+#include <cmath>
+
+__global__ void fileEncryption128counterWithOneTableExtendedSharedMemoryBytePermPartlyExtendedSBox(u32* pt, u32* ct, u32* rk, u32* t0G, u32* t4G,
+	u32* encryptionCountG, u32* threadCountG);
+__global__ void fileEncryption192counterWithOneTableExtendedSharedMemoryBytePermPartlyExtendedSBox(u32* pt, u32* ct, u32* rk, u32* t0G, u32* t4G,
+	u32* encryptionCountG, u32* threadCountG);
+__global__ void fileEncryption256counterWithOneTableExtendedSharedMemoryBytePermPartlyExtendedSBox(u32* pt, u32* ct, u32* rk, u32* t0G, u32* t4G,
+	u32* encryptionCountG, u32* threadCountG);
+
+static double entropy(const std::vector<unsigned char>& v) {
+	if (v.empty()) return 0.0;
+	double cnt[256] = {};
+	for (auto x : v) cnt[(int)x] += 1.0;
+	double N = (double)v.size(), H = 0.0;
+	for (int i = 0; i < 256; ++i)
+		if (cnt[i]) { double p = cnt[i] / N; H -= p * std::log2(p); }
+	return H;
+}
+
+static double avalanche(const unsigned char* a, const unsigned char* b, size_t n) {
+	if (n == 0) return 0.0;
+	unsigned long long d = 0;
+	for (size_t i = 0; i < n; ++i) {
+		unsigned char x = a[i] ^ b[i];
+		while (x) { x &= (x - 1); d++; }
+	}
+	return (double)d / (8.0 * (double)n);
+}
+
+static double pearson(const unsigned char* a, const unsigned char* b, size_t n) {
+	if (n == 0) return 0.0;
+	unsigned long long sx = 0, sy = 0, sxy = 0;
+	for (size_t i = 0; i < n; ++i) {
+		unsigned char xa = a[i], xb = b[i], ab = xa & xb;
+		int px = 0, py = 0, pxy = 0;
+		while (xa) { xa &= (xa - 1); px++; }
+		while (xb) { xb &= (xb - 1); py++; }
+		while (ab) { ab &= (ab - 1); pxy++; }
+		sx += px; sy += py; sxy += pxy;
+	}
+	double N = 8.0 * (double)n, mx = (double)sx / N, my = (double)sy / N;
+	double cov = (double)sxy / N - mx * my;
+	double den = std::sqrt(mx * (1 - mx) * my * (1 - my));
+	return den == 0.0 ? 0.0 : cov / den;
+}
+
+static void launchFileEncryptionKernel(int keyLen, u32* pt, u32* ct, u32* roundKeys, u32* t0, u32* t4,
+	u32* encryptionCount, u32* threadCount) {
+	if (keyLen == AES_128_KEY_LEN_INT) {
+		fileEncryption128counterWithOneTableExtendedSharedMemoryBytePermPartlyExtendedSBox<<<BLOCKS, THREADS>>>(pt, ct, roundKeys, t0, t4, encryptionCount, threadCount);
+	}
+	else if (keyLen == AES_192_KEY_LEN_INT) {
+		fileEncryption192counterWithOneTableExtendedSharedMemoryBytePermPartlyExtendedSBox<<<BLOCKS, THREADS>>>(pt, ct, roundKeys, t0, t4, encryptionCount, threadCount);
+	}
+	else if (keyLen == AES_256_KEY_LEN_INT) {
+		fileEncryption256counterWithOneTableExtendedSharedMemoryBytePermPartlyExtendedSBox<<<BLOCKS, THREADS>>>(pt, ct, roundKeys, t0, t4, encryptionCount, threadCount);
+	}
+}
 
 __device__ u32 fileEncryptionTotalG = 0;
 
@@ -570,13 +629,7 @@ __host__ int mainFileEncryption() {
 		
 		clock_t beginTime = clock();
 		// Kernels
-		if (keyLen == AES_128_KEY_LEN_INT) {
-			fileEncryption128counterWithOneTableExtendedSharedMemoryBytePermPartlyExtendedSBox<<<BLOCKS, THREADS>>>(pt, ct, roundKeys, t0, t4, encryptionCount, threadCount);
-		} else if (keyLen == AES_192_KEY_LEN_INT) {
-			fileEncryption192counterWithOneTableExtendedSharedMemoryBytePermPartlyExtendedSBox<<<BLOCKS, THREADS>>>(pt, ct, roundKeys, t0, t4, encryptionCount, threadCount);
-		} else if (keyLen == AES_256_KEY_LEN_INT) {
-			fileEncryption256counterWithOneTableExtendedSharedMemoryBytePermPartlyExtendedSBox<<<BLOCKS, THREADS>>>(pt, ct, roundKeys, t0, t4, encryptionCount, threadCount);
-		}
+		launchFileEncryptionKernel(keyLen, pt, ct, roundKeys, t0, t4, encryptionCount, threadCount);
 		
 		cudaDeviceSynchronize();
 		printf("Time elapsed (Encryption) : %f sec\n", float(clock() - beginTime) / CLOCKS_PER_SEC);
@@ -592,10 +645,52 @@ __host__ int mainFileEncryption() {
 		cudaMemcpy(ctH, ct, ciphertextSize, cudaMemcpyDeviceToHost);
 		printf("Time elapsed (Memcpy)     : %f sec\n", float(clock() - beginTime) / CLOCKS_PER_SEC);
 
+		// Statistical tests
+		std::vector<unsigned char> plainBytes(fileSize);
+		fileIn.clear();
+		fileIn.seekg(0, fileIn.beg);
+		if (fileSize > 0) {
+			fileIn.read(reinterpret_cast<char*>(plainBytes.data()), fileSize);
+		}
+
+		u32* ctHFlipped = new u32[encryptionCount[0] * U32_SIZE];
+		u32 originalPt3 = pt[3];
+		pt[3] = originalPt3 ^ 0x00000001U;
+		beginTime = clock();
+		launchFileEncryptionKernel(keyLen, pt, ct, roundKeys, t0, t4, encryptionCount, threadCount);
+		cudaDeviceSynchronize();
+		cudaMemcpy(ctHFlipped, ct, ciphertextSize, cudaMemcpyDeviceToHost);
+		printf("Time elapsed (Re-enc test): %f sec\n", float(clock() - beginTime) / CLOCKS_PER_SEC);
+		pt[3] = originalPt3;
+
+		std::vector<unsigned char> cipherBytes(fileSize);
+		u32 cipherWordCount = (fileSize + U32_SIZE - 1) / U32_SIZE;
+		for (u32 i = 0; i < cipherWordCount; ++i) {
+			u32 w = ctH[i];
+			u32 base = i * U32_SIZE;
+			if (base < fileSize) cipherBytes[base] = (unsigned char)(w >> 24);
+			if (base + 1 < fileSize) cipherBytes[base + 1] = (unsigned char)(w >> 16);
+			if (base + 2 < fileSize) cipherBytes[base + 2] = (unsigned char)(w >> 8);
+			if (base + 3 < fileSize) cipherBytes[base + 3] = (unsigned char)(w);
+		}
+
+		double entropyPlain = entropy(plainBytes);
+		double entropyCipher = entropy(cipherBytes);
+		double avalancheRatio = avalanche(reinterpret_cast<unsigned char*>(ctH), reinterpret_cast<unsigned char*>(ctHFlipped), ciphertextSize);
+		double bitPearson = pearson(reinterpret_cast<unsigned char*>(plainBytes.data()), reinterpret_cast<unsigned char*>(cipherBytes.data()), fileSize);
+		printf("-------------------------------\n");
+		printf("Entropy (plain)          : %.6f\n", entropyPlain);
+		printf("Entropy (cipher)         : %.6f\n", entropyCipher);
+		printf("Avalanche (counter +1bit): %.6f\n", avalancheRatio);
+		printf("Bit Pearson (P,C)        : %.6f\n", bitPearson);
+		printf("-------------------------------\n");
+
 		//return 0;
 
 		// Open output file
 		beginTime = clock();
+		fileIn.clear();
+		fileIn.seekg(0, fileIn.beg);
 		std::fstream fileOut(outFilePath, std::fstream::out | std::fstream::binary);
 		u32 cipherTextIndex = 0;
 		// Allocate file buffer
@@ -655,6 +750,8 @@ __host__ int mainFileEncryption() {
 		printf("Time elapsed (File write) : %f sec\n", float(clock() - beginTime) / CLOCKS_PER_SEC);
 
 		delete[] buffer;
+		delete[] ctH;
+		delete[] ctHFlipped;
 		fileOut.close();
 
 		// Free alocated arrays
